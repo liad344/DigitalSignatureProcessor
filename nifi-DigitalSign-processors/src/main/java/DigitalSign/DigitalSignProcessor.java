@@ -36,7 +36,6 @@ import org.apache.nifi.processor.io.StreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
 import javax.crypto.Cipher;
-import javax.crypto.CipherInputStream;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
@@ -134,7 +133,7 @@ public class DigitalSignProcessor extends AbstractProcessor {
         byte[] key = getKeyFromFile(context);
         byte[] encryptedHash = getEncryptedHash(session, flowFile, inputStream);
         byte[] iv = getIV(session, flowFile, inputStream);
-        byte[] decryptedHash = streamAesDecrypted(encryptedHash , key , session, iv);
+        byte[] decryptedHash = decryptedAes(encryptedHash , key , session, iv);
         if (decryptedHash != null) {
             byte[] fileHash = hashFile(inputStream , md);
             if (Arrays.equals(decryptedHash , fileHash)){
@@ -147,20 +146,26 @@ public class DigitalSignProcessor extends AbstractProcessor {
         session.transfer(flowFile , NON_VALID_SIGNATURE);
     }
 
-    private FlowFile removeHash(FlowFile flowFile, InputStream newStream, ProcessSession session) {
-        flowFile = session.write(flowFile, new StreamCallback() {
-            @Override
-            public void process(InputStream in, OutputStream out) throws IOException {
-                try (InputStreamReader inReader = new InputStreamReader(in);
-                     OutputStreamWriter outWriter = new OutputStreamWriter(out);
-                     BufferedWriter writer = new BufferedWriter(outWriter)) {
-                    writer.write(inReader.read());
+    private void removeHash(FlowFile flowFile, InputStream newStream, ProcessSession session) {
+        int trimmedSize = (int) (flowFile.getSize() - 80);
+        flowFile = session.write(flowFile, (in, out) -> {
+            int pointer = 0;
+            while (pointer != trimmedSize) {
+                int leftToRead = trimmedSize % bufferSize;
+                byte[] data;
+                if (leftToRead == 0) {
+                    data = in.readNBytes(bufferSize);
+                    pointer += bufferSize;
+                } else {
+                    data = in.readNBytes(leftToRead);
+                    pointer += leftToRead;
                 }
+                out.write(data);
             }
         });
     }
 
-    private byte[] getEncryptedHash(ProcessSession session, FlowFile flowFile, InputStream inputStream) throws IOException {
+        private byte[] getEncryptedHash(ProcessSession session, FlowFile flowFile, InputStream inputStream) throws IOException {
         byte[] encryptedHash = new byte[64];
         int n = inputStream.readNBytes(encryptedHash , Math.toIntExact(flowFile.getSize()) - 64 , 64);
         if (n != 64){
@@ -198,7 +203,7 @@ public class DigitalSignProcessor extends AbstractProcessor {
         }
         return md.digest();
     }
-    private byte[] streamAesDecrypted(byte[] encryptedHash, byte[] key, ProcessSession session, byte[] ivBytes) {
+    private byte[] decryptedAes(byte[] encryptedHash, byte[] key, ProcessSession session, byte[] ivBytes) {
         try {
             Cipher cipher = Cipher.getInstance("AES/CFB/NoPadding");
             SecretKeySpec secretKey = new SecretKeySpec(key, "AES");
