@@ -60,6 +60,13 @@ public class DigitalSignProcessor extends AbstractProcessor {
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
+    public static final PropertyDescriptor PassThroughLen = new PropertyDescriptor
+            .Builder().name("PassThroughLen")
+            .displayName("\"PassThroughLen")
+            .description("\"PassThroughLen")
+            .required(true)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
     public static final PropertyDescriptor RouteId = new PropertyDescriptor
             .Builder().name("RouteId")
             .displayName("RouteId")
@@ -138,32 +145,31 @@ public class DigitalSignProcessor extends AbstractProcessor {
             byte[] fileHash = hashFile(inputStream , md);
             if (Arrays.equals(decryptedHash , fileHash)){
                 InputStream newStream = session.read(flowFile);
-                FlowFile OgFlowFile = removeHash(flowFile , newStream , session) ;
-                session.transfer( OgFlowFile , VALID_SIGNATURE);
+                FlowFile newff = session.create();
+                OutputStream newFileOutStream = session.write(newff);
+                removeHash(flowFile , newStream , session , newFileOutStream) ;
+                session.transfer( newff , VALID_SIGNATURE);
             }
         }
         inputStream.close();
         session.transfer(flowFile , NON_VALID_SIGNATURE);
     }
 
-    private void removeHash(FlowFile flowFile, InputStream newStream, ProcessSession session) {
+    private void removeHash(FlowFile flowFile, InputStream newStream, ProcessSession session, OutputStream newFileOutStream) throws IOException {
         int trimmedSize = (int) (flowFile.getSize() - 80);
-        flowFile = session.write(flowFile, (in, out) -> {
             int pointer = 0;
             while (pointer != trimmedSize) {
                 int leftToRead = trimmedSize % bufferSize;
                 byte[] data;
                 if (leftToRead == 0) {
-                    data = in.readNBytes(bufferSize);
+                    data = newStream.readNBytes(bufferSize);
                     pointer += bufferSize;
                 } else {
-                    data = in.readNBytes(leftToRead);
+                    data = newStream.readNBytes(leftToRead);
                     pointer += leftToRead;
                 }
-
-                out.write(data);
+                newFileOutStream.write(data);
             }
-        });
     }
 
         private byte[] getEncryptedHash(ProcessSession session, FlowFile flowFile, InputStream inputStream) throws IOException {
