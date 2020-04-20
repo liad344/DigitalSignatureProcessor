@@ -160,6 +160,7 @@ public class DigitalSignProcessor extends AbstractProcessor {
                     data = in.readNBytes(leftToRead);
                     pointer += leftToRead;
                 }
+
                 out.write(data);
             }
         });
