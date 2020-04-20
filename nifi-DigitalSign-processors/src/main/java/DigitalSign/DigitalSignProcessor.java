@@ -62,8 +62,8 @@ public class DigitalSignProcessor extends AbstractProcessor {
             .build();
     public static final PropertyDescriptor PassThroughLen = new PropertyDescriptor
             .Builder().name("PassThroughLen")
-            .displayName("\"PassThroughLen")
-            .description("\"PassThroughLen")
+            .displayName("PassThroughLen")
+            .description("if 0 then all files are checked for digital signature")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
@@ -182,7 +182,7 @@ public class DigitalSignProcessor extends AbstractProcessor {
     }
     private byte[] getIV(ProcessSession session, FlowFile flowFile, InputStream inputStream) throws IOException {
         byte[] iv = new byte[16];
-        int n = inputStream.readNBytes(iv , Math.toIntExact(flowFile.getSize()) - 64 , 64);
+        int n = inputStream.readNBytes(iv , Math.toIntExact(flowFile.getSize()) - 80 , 16);
         if (n != 16){
             session.transfer(flowFile , FAILURE);
         }
